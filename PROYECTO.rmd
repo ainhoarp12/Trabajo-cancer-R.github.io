@@ -1,0 +1,216 @@
+---
+title: |
+   ![](Logo_FacCiencias.png){width="10%"}
+   Genomica de la sensibilidad a los medicamentos en el cancer (GDSC) 
+   ![](Logo_UCO.png){width="10%"}
+author: "Ainhoa Romero, Andrea Ponce y Maria Perez"
+date: "`r Sys.Date()`"
+output: 
+ html_document:
+   toc: TRUE
+   number_sections: TRUE
+   bibliography: [kaggle GDSC, libraries.bib]
+link-citation: TRUE
+---
+
+<style>
+  h1.title {
+    color: #2980B9;
+    font-family: Verdana, sans-serif;
+    font-weight: normal;
+    text-align: center;
+    font-size: 32px;
+  }
+  h4.author {
+    color: #800020;
+    text-align: center;
+  }
+  body {
+    text-align: justify;
+  }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<!--Cargar las libreias que vamos a utilizar, queremos que el codigo se ejecute, pero no aparezca en el documento final, tambien excluimos los avisos y mensajes-->
+
+```{r cargar-librerias, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Cargar los paquetes necesarios
+library(dplyr)
+library(ggplot2)
+library(readxl)
+```
+
+<!--Para generar titulos, subtitulos etc se usa # el numero de # determina el estilo y el formato del texto-->
+
+# Introduccion
+
+## Trabajo seleccionado
+
+Vamos a trabajar con los datos de ------.En nuestra base de datos hemos encontrado un total de 5 archivos:\
+
+1.**“Compounds-annotation.csv”**es un diccionario de fármacos, relaciona el nombre del fármaco con su objetivo biológico y la vía de señalización a la que afecta.\
+2.**“cell_lines_details.xlsx”**  es un archivo que contiene las características biológicas de las células usadas en el experimento\
+3.**“cell_lines_details.xlsx-decode.csv”** es un leyenda para entender las abreviaturas\
+4.**“GDSC2-dataset.csv”** está es la fuente original del archivo que hemos utilizado\
+5.[“GDSC_dataset.csv”]{style="color: red;"} este es el archivo que hemos utilizado.\ Combina la información de la línea celular, el tipo de cáncer, el fármaco y la repuestos al fármaco.\
+
+
+Vamos a comparar la respuesta del fármaco *Camptothecin*, un inhibidor de topoisimerasa, entre **celulas de cancer de pulmon (LUAD) y cáncer de mama (BRCA). **
+
+![](foto_farmaco.jpeg){width="40%"}
+
+## Los datos
+
+<!-- Leer los datos desde el fichero que esta en la misma carpeta que Rmarkdown. Si el fichero est en otra carpeta actualizar la localizacion del archivo-->
+
+
+```{r leer-datos-1, echo=FALSE, warning=FALSE}
+library(readxl)
+GDSC_DATASET <- read.csv("GDSC_DATASET_filtrado.csv") # importar datos que vamos a estudiar
+View(GDSC_DATASET)
+```
+
+
+<!-- El codigo en R en linea-->
+
+Los datos tiene `r nrow(GDSC_DATASET)` filas y `r ncol(GDSC_DATASET)`columnas. 
+
+<!-- Links a pginas/archivos externos [](direccinLink)-->
+
+
+Los datos de este proyecto fueron descaragdos desde [kaggle GDSC] (<https://www.kaggle.com/datasets/samiraalipour/genomics-of-drug-sensitivity-in-cancer-gdsc/data>)
+
+<!-- Primera vsita de los datos -->
+
+```{r datos_analisis, echo=FALSE}
+knitr::kable(head(GDSC_DATASET, 8), align = 'c', caption = "Tabla 1: Ocho primeras filas de los datos filtrados")
+```
+
+
+
+Cargamos el conjunto de datos principal y filtramos la información necesaria para el análisis.
+
+Para el análisis, hemos creado un subconjunto de datos (datos_analisis) seleccionando únicamente las variables que nos interesan para nuestra hipótesis: 
+-La medida de sensibilidad del fármaco (LN_IC50), es una variable numérica (continua) dependiente, porque su valor depende del tipo de células que estemos mirando. Es el efecto o el resultado que medimos.
+- El tipo histológico de cáncer (TCGA_DESC) es una variable categórica e independiente, porque es la categoria que define los grupos. No cambia, es una caracteristica fija de las células (o es de pulmón o es de mama)  es la supuesta causa de que la sensibilidad cambie. 
+- Se ha incluido también el identificador de la línea celular (CELL_LINE_NAME) y el nombre del fármaco(DRUG NAME) para asegurar la integridad de los datos y el correcto filtrado de la muestra.
+
+
+```{verbatim}
+
+# Limpieza y filtrado con dplyr
+datos_analisis <- GDSC_DATASET %>% # Le asignamos un nuevo nombre a nuestra base de datos filtrada
+  select(CELL_LINE_NAME, TCGA_DESC, DRUG_NAME, LN_IC50) %>% # Filtra las variables de interes
+  filter(DRUG_NAME == "Camptothecin") %>% # Filtramos el farmaco que vamos a estudiar
+  filter(TCGA_DESC %in% c("LUAD", "BRCA")) # Filtramos por las enfermedades que vamos a estudiar
+  
+write.csv(datos_analisis, "GDSC_DATASET_filtrado.csv")
+
+# Verificamos cuántos datos tenemos de cada grupo
+table(datos_analisis$TCGA_DESC)
+
+```
+
+
+
+
+
+Vamos a analizar cómo la variable independiente (TCGA_DESC) influye sobre la variable dependiente numérica (LN_IC50). 
+Necesitamos filtrar la variable DRUG NAME, porque solo nos interesa el fármaco Camptothecin y también la variable TCGA_DESC según los tipos de cáncer que vamos a estudiar: LUAD (cáncer de pulmón) y BRCA (cáncer de mama) 
+
+
+# Visualización de Datos 
+
+
+En este boxplot se compara la sensibilidad al fármaco Camptothecin entre los dos tipos de cáncer (BRCA y LUAD).
+En eje X se muestran los 2 tipos de cáncer y el eje y es LN IC50
+
+
+
+```{r visualizacion, echo= FALSE}
+ggplot(GDSC_DATASET, aes(x = TCGA_DESC, y = LN_IC50, fill = TCGA_DESC)) + 
+  geom_boxplot(alpha = 0.7) + # Dibuja las cajas. La linea negra en medio de la caja es la **mediana**. Si las cajas estan a alturas muy diferentes, es probable que haya una diferencia significativa
+  geom_jitter(width = 0.2, alpha = 0.3) + # Muestra los puntos individuales de fondo
+  theme_minimal() +
+  labs(
+    title = "Sensibilidad al camptothecin: Pulmón (LUAD) vs Mama (BRCA)",
+    subtitle = "Valores menores de LN_IC50 indican mayor sensibilidad al fármaco",
+    x = "Tipo de Cáncer (TCGA)",
+    y = "Logaritmo de IC50",
+    fill = "Tipo"
+  ) +
+  scale_fill_manual(values = c("LUAD" = "#8E44AD", "BRCA" = "#16A085"))
+```
+
+**INTERPRETACIÓN DEL GRÁFICO:** 
+
+Los valores más bajos de LN_ IC50 tienen mayor sensibilidad al fármaco y los más altos más resistencia. 
+Podemos observar que el cáncer de pulmón (LUAD) tiene la mediana más baja que el de mama (BRCA) y BCRA tiene valores más altos, es decir que LUAD es más sensible a la Camptotecina. 
+Ambos grupos muestran bastante variabilidad, como se observa por la dispersión de los puntos individuales alrededor de las cajas de las cajas del boxplot.
+En ambos tipos de cáncer se observan valores. No obstante, en el grupo BRCA aparecen valores más altos de LN_ IC50, lo que indica que algunos casos presentan una clara resistencia al fármaco en comparación con LUAD.
+
+
+
+# Hipotesis
+
+El objetivo es determinar si existe una diferencia significativa en la sensibilidad al farmaco **Camptothecin** entre las lineas celulares de **Adenocarcinoma de Pulmon (LUAD)** y **Carcinoma Invasivo de Mama (BRCA)**
+
+H0: No existe diferencia en la media de sensibilidad (LN_IC50) al Camptothecin entre celulas de pulmon (LUAD) y celulas de mama (BRCA)\
+H1: Existe una diferencia significativa en la sensibilidad media entre ambos tipos de cancer.
+
+
+# Materiales y metodos
+
+```{r bibliografia, message=FALSE, warning=FALSE, include=FALSE}
+knitr::write_bib(c(.packages(), 'dplyr', 'ggplot2'), 'libraries.bib')
+
+```
+
+Para llevar a cabo el analisis usamos R [@R-base] con las librerias dplyr [@R-dplyr] y ggplot [@R-ggplot2; @ggplot22016]. Para la creacion de este informe hemos utilizado el paquete knitr [@R-knitr; @knitr2015; @knitr2014] y pandoc.
+
+# Resultados
+
+## Test Estadístico 
+
+Finalmente, ejecutamos el código para validar la hipótesis. Usaremos un **T-test para muestras independientes**.
+
+Esta eleccion se fundamenta en el diseo experimental, que busca comparar las medias de una variable cuantitativa continua (la sensibilidad al farmaco, LN_IC50) entre dos grupos categoricos y excluyentes (tipos de cancer LUAD y BRCA). Se asume que las observaciones entre ambos grupos son independientes entre si, ya que provienen de lineas celulares biologicamente distintas.
+
+
+```{r test_estadistico, echo= FALSE}
+# Ejecutar el t-test
+resultado_test <- t.test(LN_IC50 ~ TCGA_DESC, data = GDSC_DATASET)
+
+# Mostrar resultados
+print(resultado_test)
+```
+
+
+```{r interpretacion, echo=FALSE}
+# Extraemos el p-valor para imprimirlo automáticamente en el texto
+p_valor <- resultado_test$p.value
+
+# Lógica para escribir la conclusión automática
+decision <- ifelse(p_valor < 0.05, 
+                   "rechazamos la hipótesis nula.", 
+                   "no tenemos evidencia suficiente para rechazar la hipótesis nula.")
+
+```
+
+
+# Conclusion
+
+Dado que el p_valor es 0.01 y y el nivel de significacion de 0.05, consideramos que estadisticamente, la respuesta al farmaco Camptothecin en cancer de pulmon y cancer de mama es diferente segun los datos observados.
+
+# Informacion de la sesion y referencias
+
+```{r sessionInfo, echo=FALSE, warning=FALSE}
+session <- sessionInfo()
+print(session)
+```
+
+
